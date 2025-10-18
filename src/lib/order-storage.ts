@@ -19,6 +19,7 @@ export interface Order {
   status: 'pending' | 'confirmed' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
   paymentStatus: 'pending' | 'completed' | 'failed';
   paymentMethod: 'qr_code';
+  paymentProofUrl?: string;
   qrCodeData?: string;
   transactionId?: string;
   createdAt: string;
@@ -69,6 +70,7 @@ export const getOrders = async (userId?: string): Promise<Order[]> => {
     status: order.status as Order['status'],
     paymentStatus: order.payment_status as Order['paymentStatus'],
     paymentMethod: order.payment_method as Order['paymentMethod'],
+    paymentProofUrl: order.payment_proof_url || undefined,
     qrCodeData: order.qr_code_data || undefined,
     transactionId: order.transaction_id || undefined,
     createdAt: order.created_at,
@@ -103,6 +105,7 @@ export const saveOrder = async (order: Order): Promise<void> => {
       status: order.status,
       payment_status: order.paymentStatus,
       payment_method: order.paymentMethod,
+      payment_proof_url: order.paymentProofUrl,
       qr_code_data: order.qrCodeData,
       transaction_id: order.transactionId,
       estimated_delivery: order.estimatedDelivery,
@@ -244,6 +247,7 @@ export const getAllOrdersForAdmin = async (): Promise<Order[]> => {
     status: order.status as Order['status'],
     paymentStatus: order.payment_status as Order['paymentStatus'],
     paymentMethod: order.payment_method as Order['paymentMethod'],
+    paymentProofUrl: order.payment_proof_url || undefined,
     qrCodeData: order.qr_code_data || undefined,
     transactionId: order.transaction_id || undefined,
     createdAt: order.created_at,

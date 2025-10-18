@@ -5,10 +5,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { ArrowLeft, CreditCard, MapPin, Package } from 'lucide-react';
+import { ArrowLeft, CreditCard, MapPin, Package, Upload } from 'lucide-react';
 import { getCartItems, getCartTotal, clearCart } from '@/lib/cart-storage';
 import { saveOrder, generateOrderNumber, calculateEstimatedDelivery, calculateShippingCost, type Order } from '@/lib/order-storage';
 import { saveOrder as saveOrderToDatabase, isSupabaseConfigured } from '@/lib/db-services';
+import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { useUserAuth } from '@/context/UserAuthContext';
 
@@ -25,6 +26,8 @@ const Checkout = () => {
   const [pincode, setPincode] = useState('');
   const [showPayment, setShowPayment] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [paymentProofFile, setPaymentProofFile] = useState<File | null>(null);
+  const [paymentProofPreview, setPaymentProofPreview] = useState<string | null>(null);
 
   useEffect(() => {
     if (cartItems.length === 0) {
@@ -80,6 +83,54 @@ const Checkout = () => {
     return `upi://pay?pa=${upiId}&pn=${encodeURIComponent(merchantName)}&am=${amount.toFixed(2)}&cu=INR&tn=${encodeURIComponent(`Order ${orderNumber}`)}`;
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error('File size must be less than 5MB');
+        return;
+      }
+      if (!file.type.startsWith('image/')) {
+        toast.error('Please upload an image file');
+        return;
+      }
+      setPaymentProofFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPaymentProofPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const uploadPaymentProof = async (orderNumber: string): Promise<string | null> => {
+    if (!paymentProofFile || !user) return null;
+
+    try {
+      const fileExt = paymentProofFile.name.split('.').pop();
+      const fileName = `${user.id}/${orderNumber}_${Date.now()}.${fileExt}`;
+
+      const { data, error } = await supabase.storage
+        .from('order-payments')
+        .upload(fileName, paymentProofFile, {
+          cacheControl: '3600',
+          upsert: false,
+        });
+
+      if (error) throw error;
+
+      const { data: urlData } = supabase.storage
+        .from('order-payments')
+        .getPublicUrl(data.path);
+
+      return urlData.publicUrl;
+    } catch (error) {
+      console.error('Error uploading payment proof:', error);
+      toast.error('Failed to upload payment proof');
+      return null;
+    }
+  };
+
   const handlePlaceOrder = async () => {
     if (!isAuthenticated || !user) {
       toast.error('Please log in to place an order');
@@ -87,10 +138,21 @@ const Checkout = () => {
       return;
     }
 
+    if (!paymentProofFile) {
+      toast.error('Please upload payment proof before placing order');
+      return;
+    }
+
     setIsProcessing(true);
 
     const orderNumber = generateOrderNumber();
     const qrCodeData = generateUPIQRString(total, orderNumber);
+
+    const paymentProofUrl = await uploadPaymentProof(orderNumber);
+    if (!paymentProofUrl) {
+      setIsProcessing(false);
+      return;
+    }
 
     const order: Order = {
       id: `order_${Date.now()}`,
@@ -111,6 +173,7 @@ const Checkout = () => {
       paymentStatus: 'pending',
       paymentMethod: 'qr_code',
       qrCodeData,
+      paymentProofUrl,
       createdAt: new Date().toISOString(),
       estimatedDelivery: calculateEstimatedDelivery(pincode)
     };
@@ -121,22 +184,8 @@ const Checkout = () => {
       // Save to Supabase if configured
       if (isSupabaseConfigured) {
         await saveOrderToDatabase({
-          userId: user.id,
-          orderNumber,
-          customerName: name,
-          customerEmail: email,
-          customerPhone: phone,
-          customerAddress: address,
-          customerPincode: pincode,
-          items: cartItems,
-          subtotal,
-          shippingCost,
-          totalAmount: total,
-          paymentMethod: 'qr_code',
-          paymentStatus: 'pending',
-          qrCodeData,
-          estimatedDelivery: calculateEstimatedDelivery(pincode),
-          notes: 'Order placed via checkout'
+          ...order,
+          id: order.id,
         });
       }
 
@@ -206,16 +255,42 @@ const Checkout = () => {
 
               <Separator />
 
-              <div className="space-y-3">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="payment-proof">Upload Payment Proof *</Label>
+                  <div className="flex flex-col gap-2">
+                    <Input
+                      id="payment-proof"
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileChange}
+                      disabled={isProcessing}
+                      className="cursor-pointer"
+                    />
+                    {paymentProofPreview && (
+                      <div className="relative w-full h-48 border rounded-lg overflow-hidden">
+                        <img
+                          src={paymentProofPreview}
+                          alt="Payment proof preview"
+                          className="w-full h-full object-contain"
+                        />
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Upload a screenshot of your payment confirmation (Max 5MB)
+                  </p>
+                </div>
+
                 <Button
                   className="w-full bg-gradient-to-r from-primary to-secondary"
                   onClick={handlePlaceOrder}
-                  disabled={isProcessing}
+                  disabled={isProcessing || !paymentProofFile}
                 >
-                  {isProcessing ? 'Processing...' : 'I Have Completed Payment'}
+                  {isProcessing ? 'Processing...' : 'Place Order'}
                 </Button>
                 <p className="text-xs text-center text-muted-foreground">
-                  Click above after successfully completing the payment
+                  Upload payment proof and place your order
                 </p>
               </div>
             </CardContent>

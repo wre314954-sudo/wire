@@ -1,28 +1,10 @@
-import { useMemo } from "react";
-
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useUserAuth } from "@/context/UserAuthContext";
-
-const formatContact = (contact: string) => {
-  if (/^\S+@\S+\.\S+$/.test(contact)) {
-    return contact.toLowerCase();
-  }
-  const digits = contact.replace(/\D/g, "");
-  if (digits.length >= 10) {
-    const lastFour = digits.slice(-4);
-    return `•••• •••• ${lastFour}`;
-  }
-  return contact;
-};
+import { Mail, Phone, User } from "lucide-react";
 
 const Profile = () => {
   const { user, logout } = useUserAuth();
-
-  const formattedContact = useMemo(() => {
-    if (!user) return "";
-    return formatContact(user.contact);
-  }, [user]);
 
   if (!user) {
     return (
@@ -43,19 +25,37 @@ const Profile = () => {
         <Card className="border-border/60 shadow-lg">
           <CardHeader>
             <CardTitle className="text-3xl">My Profile</CardTitle>
-            <CardDescription>Manage your secure, OTP-based account.</CardDescription>
+            <CardDescription>Your account information</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div>
-              <h2 className="text-sm font-medium text-muted-foreground">Verified Contact</h2>
-              <p className="mt-2 text-lg font-semibold">{formattedContact}</p>
+            <div className="space-y-4">
+              <div className="flex items-start gap-3 p-3 bg-accent/20 rounded-lg">
+                <User className="h-5 w-5 mt-0.5 text-muted-foreground" />
+                <div className="flex-1">
+                  <h2 className="text-sm font-medium text-muted-foreground mb-1">Full Name</h2>
+                  <p className="text-lg font-semibold">{user.full_name || 'Not provided'}</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 p-3 bg-accent/20 rounded-lg">
+                <Mail className="h-5 w-5 mt-0.5 text-muted-foreground" />
+                <div className="flex-1">
+                  <h2 className="text-sm font-medium text-muted-foreground mb-1">Email</h2>
+                  <p className="text-lg font-semibold">{user.email}</p>
+                </div>
+              </div>
+
+              {user.phone && (
+                <div className="flex items-start gap-3 p-3 bg-accent/20 rounded-lg">
+                  <Phone className="h-5 w-5 mt-0.5 text-muted-foreground" />
+                  <div className="flex-1">
+                    <h2 className="text-sm font-medium text-muted-foreground mb-1">Phone</h2>
+                    <p className="text-lg font-semibold">{user.phone}</p>
+                  </div>
+                </div>
+              )}
             </div>
-            <div>
-              <h2 className="text-sm font-medium text-muted-foreground">Last Login</h2>
-              <p className="mt-2 text-lg font-semibold">
-                {new Date(user.lastLoginAt).toLocaleString()}
-              </p>
-            </div>
+
             <Button variant="outline" onClick={logout} className="w-full">
               Logout
             </Button>
